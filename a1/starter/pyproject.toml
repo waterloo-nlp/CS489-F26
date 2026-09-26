@@ -1,0 +1,11 @@
+[project]
+name = "cs489-a1"
+version = "0.1.0"
+description = "CS 489 Assignment 1: Data, Tokenization and Statistical Language Models"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy",
+    "torch",
+    "sentencepiece",
+    "pyyaml",
+]
