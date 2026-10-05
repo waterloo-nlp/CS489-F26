@@ -63,15 +63,24 @@ FIXED_TRAINING_CONFIG = {
     "eval_max_tokens": 262_144,
     "seed": 489,
 }
+_EVAL_BATCH_SIZE = 8
 
 
 def pick_device() -> torch.device:
     return torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
 
+def _native_bf16_supported() -> bool:
+    """True only for GPUs with native bf16 support (Ampere+), not emulated bf16."""
+    try:
+        return torch.cuda.is_bf16_supported(including_emulation=False)
+    except TypeError:  # older PyTorch without the including_emulation argument
+        return torch.cuda.is_bf16_supported()
+
+
 class _Amp:
-    """Autocast/GradScaler setup: bf16 where supported (Ampere+), fp16 with a
-    GradScaler on older GPUs (e.g. the Colab T4), fp32 on CPU."""
+    """Autocast/GradScaler setup: bf16 where natively supported (Ampere+), fp16
+    with a GradScaler on older GPUs (e.g. the Colab T4), fp32 on CPU."""
 
     def __init__(self, device: torch.device):
         self.device = device
@@ -79,7 +88,7 @@ class _Amp:
         self.dtype = None
         self.scaler = None
         if self.enabled:
-            self.dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+            self.dtype = torch.bfloat16 if _native_bf16_supported() else torch.float16
             if self.dtype == torch.float16:
                 try:
                     self.scaler = torch.amp.GradScaler("cuda")
@@ -225,7 +234,8 @@ def train(
             group["lr"] = lr
         x, y = sample_batch()
         with amp.autocast():
-            _, loss = model(x, y)
+            logits, loss = model(x, y)
+        del logits
         if amp.scaler is not None:
             amp.scaler.scale(loss).backward()
             amp.scaler.unscale_(optimizer)
@@ -246,13 +256,13 @@ def train(
             )
         if (step + 1) % cfg_t["eval_interval"] == 0 or (step + 1) == cfg_t["max_steps"]:
             nll, n_tok = evaluate_token_nll(
-                model, dev_ids, ctx, cfg_t["batch_size"], device,
+                model, dev_ids, ctx, _EVAL_BATCH_SIZE, device,
                 max_tokens=cfg_t["eval_max_tokens"], amp=amp,
             )
             mean = nll / n_tok
             print(f"  dev prefix ({n_tok} tokens): nll/token {mean:.4f}  ppl {math.exp(mean):.2f}")
 
-    nll, n_tok = evaluate_token_nll(model, dev_ids, ctx, cfg_t["batch_size"], device, amp=amp)
+    nll, n_tok = evaluate_token_nll(model, dev_ids, ctx, _EVAL_BATCH_SIZE, device, amp=amp)
     mean_nll = nll / n_tok
     metrics = {
         "dev_tokens_scored": n_tok,
@@ -278,7 +288,10 @@ def train(
     }
     (out / "run_config.json").write_text(json.dumps(run_config, indent=2) + "\n", encoding="utf-8")
     if device.type == "cuda":
-        print(f"peak GPU memory: {torch.cuda.max_memory_allocated() / 2**30:.2f} GiB")
+        print(
+            f"peak GPU memory: {torch.cuda.max_memory_allocated() / 2**30:.2f} GiB allocated, "
+            f"{torch.cuda.max_memory_reserved() / 2**30:.2f} GiB reserved"
+        )
     print(f"wrote {out / 'model.pt'} and {out / 'run_config.json'}")
     return metrics
 
