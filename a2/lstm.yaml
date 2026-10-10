@@ -1,0 +1,59 @@
+seed: 489
+data:
+  train: ../data/train.jsonl
+  dev: ../data/dev.jsonl
+  tokenizer: utf8_bytes_v1
+  block_length: 256
+model:
+  type: lstm
+  embedding_dim: 256
+  hidden_dim: 512
+  num_layers: 2
+  dropout: 0.1
+  recurrent_bias: true
+  output_bias: true
+  initialization: pytorch_default
+optimizer:
+  name: adam
+  learning_rate: 0.001
+  betas: [0.9, 0.999]
+  epsilon: 0.00000001
+  weight_decay: 0.0
+  amsgrad: false
+  foreach: false
+  fused: false
+training:
+  batch_size: 64
+  epochs: 3
+  shuffle: true
+  drop_last: false
+  gradient_clip_norm: 1.0
+  precision: float32
+  scaler:
+    init_scale: 65536.0
+    growth_factor: 2.0
+    backoff_factor: 0.5
+    growth_interval: 2000
+evaluation:
+  batch_size: 64
+runtime:
+  device: cuda
+  num_workers: 0
+  pin_memory: true
+  num_threads: 4
+  deterministic_algorithms: false
+  cudnn_benchmark: false
+  cudnn_deterministic: false
+  allow_tf32: false
+  cublas_workspace_config: ':4096:8'
+wandb:
+  project: cs489-a2
+  entity: null
+  name: lstm-baseline
+  mode: offline
+  dir: ../logs
+output:
+  artifact_dir: ../artifacts/part1
+  metrics_file: ../results/part1.csv
+  summary_file: ../results/part1-summary.json
+  plot_file: ../results/part1-loss.png
