@@ -58,8 +58,6 @@ def _batch_nll(predict_logits, blocks):
     scores = logits[real_positions].astype(
         np.result_type(logits.dtype, np.float64), copy=False
     )
-    if not np.isfinite(scores).all():
-        raise ValueError("Logits at real positions must all be finite")
     with np.errstate(over="ignore", under="ignore", invalid="ignore"):
         scores -= scores.max(axis=1, keepdims=True)
         log_partition = np.log(np.exp(scores).sum(axis=1))
@@ -82,8 +80,8 @@ def evaluate(predict_logits, documents, *, batch_size=64) -> dict:
     Inputs are [BOS=256] + block[:-1], right-padded with PAD=257; the mask is 1
     for real positions (including BOS), 0 for padding.
     Position t predicts block[t], without another shift or an EOS target.
-    All 258 classes are normalized together; real-position logits must be
-    finite, and padding positions are ignored.
+    All 258 classes are normalized together, and padding positions are ignored.
+    Nonfinite logits are allowed if the resulting loss is finite.
     The callback handles device conversion, causal prediction, disabled
     gradients/dropout, and resetting state and positions to zero per block.
 
@@ -107,7 +105,7 @@ def evaluate(predict_logits, documents, *, batch_size=64) -> dict:
         nll += _batch_nll(predict_logits, blocks)
         num_bytes += sum(map(len, blocks))
         if not math.isfinite(nll):
-            raise ValueError("NLL or loss overflow in float64 accumulation")
+            raise ValueError("Non-finite NLL or loss")
     if num_bytes == 0:
         raise ValueError("Cannot evaluate a corpus with no UTF-8 bytes")
     loss = nll / num_bytes
