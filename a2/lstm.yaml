@@ -1,7 +1,10 @@
 seed: 489
 data:
-  train: ../data/train.jsonl
-  dev: ../data/dev.jsonl
+  dataset_id: compling/cs489-f26-a2
+  revision: 5b5e9c61121568c20cd2ce344f6b90901600f09b
+  train_split: train
+  dev_split: dev
+  text_field: text
   tokenizer: utf8_bytes_v1
   block_length: 256
 model:
